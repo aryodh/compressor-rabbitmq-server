@@ -53,14 +53,15 @@ def compress(filename_w_frmt, filename, uniqueId):
         pos_dot = max([pos for pos, char in enumerate(filename) if char == "."])
         filename = filename[:pos_dot]
         zipname = filename + ".zip"
-
         with zipfile.ZipFile(zipname, 'w', compression=zipfile.ZIP_DEFLATED) as _zip:
             the_bytes = 0
             the_obytes = 0
             # Replace original write() with a wrapper to track progress
             _zip.fp.write = types.MethodType(partial(progress, os.path.getsize(filename_w_frmt), _zip.fp.write, uniqueId, filename), _zip.fp)
             _zip.write(filename_w_frmt)
-
+        
+        global server
+        server.publish(payload="done http://152.118.148.95:20644/download/" + filename, routing_key=uniqueId)
         
         os.remove(os.path.join(app.config['UPLOAD_FOLDER'], filename_w_frmt))
         os.replace("./" + zipname, "./storage/" + zipname)
@@ -80,11 +81,8 @@ def progress(total_size, original_write, uniqueId, filename, self, buf):
     if percent in perc:
         try:
             if len(perc) > 0:
-                if len(perc) > 1:
-                    perc = perc[1:]
-                    server.publish(payload=str("progress " + str(percent)), routing_key=uniqueId)
-                    return original_write(buf)
-                server.publish(payload="done /download/" + filename, routing_key=uniqueId)
+                perc = perc[1:]
+                server.publish(payload=str("progress " + str(percent)), routing_key=uniqueId)
         except:
             server = RabbitMq('upload')
             server.publish(payload=str("progress " + str(percent)), routing_key=uniqueId)
@@ -105,8 +103,8 @@ def download(filename):
 class RabbitMq():
 
     def __init__(self, queue="hello"):
-
-        self._connection = pika.BlockingConnection(pika.ConnectionParameters(host='localhost'))
+        self._credential = pika.PlainCredentials('0806444524', '0806444524')
+        self._connection = pika.BlockingConnection(pika.ConnectionParameters('152.118.148.95', 5672, '/0806444524', self._credential))
         self._channel = self._connection.channel()
         self._channel.exchange_declare(exchange='1706039515', exchange_type='direct')
 
@@ -120,4 +118,4 @@ class RabbitMq():
 if __name__ == '__main__':
     global server
     server = RabbitMq('upload')
-    app.run(port=20644, threaded=True)
+    app.run(host="0.0.0.0", port=20644, threaded=True)
